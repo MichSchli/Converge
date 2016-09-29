@@ -1,0 +1,17 @@
+'''
+Optimizer interface:
+'''
+class IOptimizer():
+
+    def __init__(self):
+        pass
+
+
+'''
+Base optimizer:
+'''
+class BaseOptimizer(IOptimizer):
+
+    def __init__(self):
+        pass
+
