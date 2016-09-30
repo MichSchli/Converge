@@ -1,6 +1,6 @@
 from abstract import IOptimizer
 import random
-
+from theano import tensor as T
 
 class GradientDescent(IOptimizer):
 
@@ -70,7 +70,28 @@ class SampleTransformer(IOptimizer):
     def valid(self):
         return self.transform_function is not None
 
-    def next_batch(self):
-        return self.transform_function(*self.next_component.next_batch())
+    def process_data(self, training_data, training_labels):
+        data = self.next_component.process_data(training_data, training_labels)
+        return self.transform_function(*data)
     
     
+class GradientClipping(IOptimizer):
+
+    max_norm = None
+
+    def valid(self):
+        return self.max_norm is not None
+
+    def compute_gradient_function(self, parameters, loss_function):
+        gradient = list(self.next_component.compute_gradient_function(parameters, loss_function))
+
+        norm = 0
+        for grad in gradient:
+            norm += (grad * grad).sum()
+        norm = T.sqrt(norm)
+
+        for i,grad in enumerate(gradient):
+            gradient[i] = grad * T.minimum(1, self.max_norm / norm)
+
+        return gradient
+

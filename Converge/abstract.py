@@ -22,6 +22,9 @@ class IOptimizer():
 
     def process_update_function(self, parameters, loss_function):
         return self.next_component.process_update_function(parameters, loss_function)
+
+    def process_data(self, training_data, training_labels):
+        return self.next_component.process_data(training_data, training_labels)
     
     def compute_gradient_function(self, parameters, loss_function):
         return self.next_component.compute_gradient_function(parameters, loss_function)
@@ -29,6 +32,9 @@ class IOptimizer():
     def next_batch(self):
         return self.next_component.next_batch()
 
+    def get_message(self):
+        return self.next_component.get_message()
+    
     def set_training_data(self, training_data, training_labels):
         self.training_data = training_data
         self.training_labels = training_labels
@@ -58,3 +64,10 @@ class BaseOptimizer(IOptimizer):
     
     def next_batch(self):
         return self.training_data, self.training_labels
+
+    def get_message(self):
+        return None
+
+    def process_data(self, training_data, training_labels):
+        return training_data, training_labels
+    

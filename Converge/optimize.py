@@ -25,14 +25,34 @@ class Optimizer():
         self.__loss__ = theano.function(inputs=input_params, outputs=self.__loss__)
     
     def loss(self, validation_data, validation_labels):
-        return self.__loss__(validation_data, validation_labels)
+        processed_data, processed_labels = self.stack.process_data(validation_data, validation_labels)
+        return self.__loss__(processed_data, processed_labels) 
     
     def fit(self, training_data, training_labels, validation_data=None, validation_labels=None):
         self.stack.set_training_data(training_data, training_labels)
-        
+
+        i = 0
+        train_loss = 0
         next_batch = self.stack.next_batch()
         while(next_batch is not None):
-            self.__update__(*next_batch)
+            i+=1
+            
+            message = self.stack.get_message()
+            if message is not None:
+                print(message)
+
+            processed_batch = self.stack.process_data(*next_batch)
+            train_loss += self.__update__(*processed_batch)
+            
+            if i % 100 == 0:
+                print(i)
+                print(train_loss/100)
+                train_loss = 0
+
+            message = self.stack.get_message()
+            if message is not None:
+                print(message)
+            
             next_batch = self.stack.next_batch()
 
 def __from_component(component_name):
@@ -47,6 +67,9 @@ def __from_component(component_name):
 
     if component_name == "SampleTransformer":
         return algorithms.SampleTransformer
+
+    if component_name == "GradientClipping":
+        return algorithms.GradientClipping
     
 def __construct_optimizer(settings):
     optimizer = BaseOptimizer()
