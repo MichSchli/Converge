@@ -1,6 +1,8 @@
 from abstract import IOptimizer
 import random
 from theano import tensor as T
+import theano
+import numpy as np
 
 class GradientDescent(IOptimizer):
 
@@ -21,6 +23,126 @@ class GradientDescent(IOptimizer):
 
         return update_list
 
+
+class AdaGrad(IOptimizer):
+
+    learning_rate = None
+    epsillon = 1e-8
+    historical_gradient = None
+
+    def initialize_running_average(self, parameters):
+        self.historical_gradient = [None]*len(parameters)
+        
+        for i,parameter in enumerate(parameters):
+            self.historical_gradient[i] = theano.shared(np.zeros_like(parameter.get_value()).astype(np.float32))
+
+    def valid(self):
+        return self.learning_rate is not None
+
+    def process_update_function(self, parameters, loss_function):
+        gradient = self.compute_gradient_function(parameters, loss_function)
+        update_list = self.next_component.process_update_function(parameters, loss_function)
+        lower_count = len(update_list)
+
+        self.initialize_running_average(parameters)
+
+        update_list += [None]*(len(gradient)*2)
+        for i in range(len(gradient)):
+            new_historical_gradient = self.historical_gradient[i] + gradient[i] * gradient[i]
+            scaling = T.sqrt(new_historical_gradient + self.epsillon)
+            delta = (self.learning_rate / scaling) * gradient[i]
+            
+            update_list[lower_count + i] = (parameters[i], parameters[i] - delta)            
+            update_list[lower_count + i + len(gradient)] = (self.historical_gradient[i], new_historical_gradient)
+
+        return update_list
+
+
+class RmsProp(IOptimizer):
+
+    learning_rate = None
+    historical_weight = None
+    epsillon = 1e-8
+    historical_gradient = None
+
+    def initialize_running_average(self, parameters):
+        self.historical_gradient = [None]*len(parameters)
+        
+        for i,parameter in enumerate(parameters):
+            self.historical_gradient[i] = theano.shared(np.zeros_like(parameter.get_value()).astype(np.float32))
+
+    def valid(self):
+        return self.learning_rate is not None and self.historical_weight is not None
+
+    def process_update_function(self, parameters, loss_function):
+        gradient = self.compute_gradient_function(parameters, loss_function)
+        update_list = self.next_component.process_update_function(parameters, loss_function)
+        lower_count = len(update_list)
+
+        self.initialize_running_average(parameters)
+
+        update_list += [None]*(len(gradient)*2)
+        for i in range(len(gradient)):
+            new_historical_gradient = self.historical_weight*self.historical_gradient[i] + (1-self.historical_weight)*gradient[i] * gradient[i]
+            scaling = T.sqrt(new_historical_gradient + self.epsillon)
+            delta = (self.learning_rate / scaling) * gradient[i]
+            
+            update_list[lower_count + i] = (parameters[i], parameters[i] - delta)            
+            update_list[lower_count + i + len(gradient)] = (self.historical_gradient[i], new_historical_gradient)
+
+        return update_list
+
+
+    
+class Adam(IOptimizer):
+
+    learning_rate = None
+    historical_gradient_weight = None
+    historical_moment_weight = None
+    
+    epsillon = 1e-8
+    historical_gradient = None
+
+    def initialize_running_average(self, parameters):
+        self.historical_gradient = [None]*len(parameters)
+        self.historical_moment = [None]*len(parameters)
+        
+        for i,parameter in enumerate(parameters):
+            self.historical_gradient[i] = theano.shared(np.zeros_like(parameter.get_value()).astype(np.float32))
+            self.historical_moment[i] = theano.shared(np.zeros_like(parameter.get_value()).astype(np.float32))
+
+        self.iteration = theano.shared(np.cast['float32'](1))
+        
+    def valid(self):
+        return self.learning_rate is not None and self.historical_gradient_weight is not None and self.historical_moment_weight is not None
+
+    def process_update_function(self, parameters, loss_function):
+        gradient = self.compute_gradient_function(parameters, loss_function)
+        update_list = self.next_component.process_update_function(parameters, loss_function)
+        lower_count = len(update_list)
+
+        self.initialize_running_average(parameters)
+
+        update_list += [None]*(len(gradient)*3+1)
+        for i in range(len(gradient)):
+            new_historical_moment = self.historical_moment_weight*self.historical_moment[i] + (1-self.historical_moment_weight) * gradient[i]
+            new_historical_gradient = self.historical_gradient_weight*self.historical_gradient[i] + (1-self.historical_gradient_weight)*gradient[i] * gradient[i]
+
+            corrected_moment = new_historical_moment / (1 - self.historical_moment_weight**self.iteration)
+            corrected_gradient = new_historical_gradient / (1 - self.historical_gradient_weight**self.iteration)
+            
+            scaling = T.sqrt(corrected_gradient + self.epsillon)
+            delta = (self.learning_rate / scaling) * corrected_moment
+            
+            update_list[lower_count + i] = (parameters[i], parameters[i] - delta)            
+            update_list[lower_count + i + len(gradient)] = (self.historical_gradient[i], new_historical_gradient)
+            update_list[lower_count + i + len(gradient)*2] = (self.historical_moment[i], new_historical_moment)
+
+        update_list[-1] = (self.iteration, self.iteration + 1)
+
+        return update_list
+
+    
 class IterationCounter(IOptimizer):
 
     max_iterations = None
@@ -58,9 +180,12 @@ class Minibatches(IOptimizer):
         pass
 
     def __random_sample(self):
-        combined = list(zip(self.training_data, self.training_labels))
-        sample = random.sample(combined, self.batch_size)
-        return zip(*sample)
+        data, labels = self.next_component.next_batch()
+        n_total = len(data)        
+
+        sample = random.sample(range(n_total), self.batch_size)
+
+        return [data[i] for i in sample], [labels[i] for i in sample]
 
 
 class SampleTransformer(IOptimizer):

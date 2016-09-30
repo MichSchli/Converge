@@ -70,6 +70,15 @@ def __from_component(component_name):
 
     if component_name == "GradientClipping":
         return algorithms.GradientClipping
+
+    if component_name == "AdaGrad":
+        return algorithms.AdaGrad
+
+    if component_name == "RmsProp":
+        return algorithms.RmsProp
+
+    if component_name == "Adam":
+        return algorithms.Adam
     
 def __construct_optimizer(settings):
     optimizer = BaseOptimizer()
