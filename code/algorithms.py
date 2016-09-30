@@ -47,15 +47,17 @@ class Minibatches(IOptimizer):
         return self.batch_size is not None and self.contiguous_sampling is not None
 
     def next_batch(self):
-        combined = list(zip(self.training_data, self.training_labels))
-        sample = random.sample(combined, self.batch_size)
-        return zip(*sample)
+        if self.contiguous_sampling:
+            return self.__contiguous_sample()
+        else:
+            return self.__random_sample()
     
     def __contiguous_sample(self):
         if current_batch is None:
             current_batch = self.next_component.next_batch()
-
         pass
 
     def __random_sample(self):
-        pass
+        combined = list(zip(self.training_data, self.training_labels))
+        sample = random.sample(combined, self.batch_size)
+        return zip(*sample)
