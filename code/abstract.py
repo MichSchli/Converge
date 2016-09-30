@@ -1,4 +1,5 @@
-
+import theano
+from theano import tensor as T
 
 '''
 Optimizer interface:
@@ -19,11 +20,11 @@ class IOptimizer():
     def process_loss_function(self, loss_function):
         return self.next_component.process_loss_function(loss_function)
 
-    def process_update_function(self, loss_function):
-        return self.next_component.process_update_function(loss_function)
+    def process_update_function(self, parameters, loss_function):
+        return self.next_component.process_update_function(parameters, loss_function)
     
-    def compute_gradient_function(self, weights, loss_function):
-        return self.next_component.compute_gradient(weights, loss_function)
+    def compute_gradient_function(self, parameters, loss_function):
+        return self.next_component.compute_gradient_function(parameters, loss_function)
     
     def next_batch(self):
         return self.next_component.next_batch()
@@ -49,11 +50,11 @@ class BaseOptimizer(IOptimizer):
     def process_loss_function(self, loss_function):
         return loss_function
 
-    def process_update_function(self, loss_function):
-        return loss_function
+    def process_update_function(self, parameters, loss_function):
+        return []
 
-    def compute_gradient_function(self, weights, loss_function):
-        return T.grad(loss_function, wrt=weights)
+    def compute_gradient_function(self, parameters, loss_function):
+        return T.grad(loss_function, wrt=parameters)
     
     def next_batch(self):
         return self.training_data, self.training_labels

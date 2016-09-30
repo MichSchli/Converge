@@ -8,14 +8,22 @@ class Optimizer():
 
     __loss__ = None
     __update__ = None
+    __parameters__ = None
     
     def __init__(self, stack):
         self.stack = stack
 
     def set_loss_function(self, loss_function):
         self.__loss__ = self.stack.process_loss_function(loss_function)
-        self.__update__ = self.stack.process_update_function(loss_function)
-
+        
+    def set_parameters_to_optimize(self, parameters_to_optimize):
+        self.__parameters__ = parameters_to_optimize
+        
+    def compute_update_function(self, input_params):
+        raw_update = self.stack.process_update_function(self.__parameters__, self.__loss__)
+        self.__update__ = theano.function(inputs=input_params, outputs=self.__loss__, updates=raw_update)
+        self.__loss__ = theano.function(inputs=input_params, outputs=self.__loss__)
+    
     def loss(self, validation_data, validation_labels):
         return self.__loss__(validation_data, validation_labels)
     
@@ -24,14 +32,14 @@ class Optimizer():
         
         next_batch = self.stack.next_batch()
         while(next_batch is not None):
-            self.__update__(*next_batch)
+            print(self.__update__(*next_batch))
             next_batch = self.stack.next_batch()
 
 def __from_component(component_name):
     if component_name == "GradientDescent":
         return algorithms.GradientDescent
     
-    if component_name == "minibatches":
+    if component_name == "Minibatches":
         return algorithms.Minibatches
 
     if component_name == "IterationCounter":
@@ -48,25 +56,41 @@ def __construct_optimizer(settings):
         
     return Optimizer(optimizer)
 
-def build(loss_function, settings):
+def build(loss_function, parameters_to_optimize, input_params, settings):
     optimizer = __construct_optimizer(settings)
+    
     optimizer.set_loss_function(loss_function)
-
+    optimizer.set_parameters_to_optimize(parameters_to_optimize)
+    optimizer.compute_update_function(input_params)
+    
     return optimizer
 
 
 if __name__ == '__main__':
-    X = T.vector('X')
+    X = T.matrix('X')
     Y = T.vector('Y')
 
-    a = theano.shared(np.ones(5))
+    W1 = theano.shared(np.random.randn(2,10))
+    W2 = theano.shared(np.random.randn(10,1))
     
-    loss = (a*X - Y).mean()
+    hidden = T.tanh(X.dot(W1))
+    output = T.nnet.sigmoid(hidden.dot(W2))   
+    
+    loss = T.nnet.binary_crossentropy(output.transpose(), Y).mean()
 
-    parameters = [('IterationCounter', {'max_iterations':5}), ('GradientDescent', {'learning_rate':0.1})]
-    opt = build(theano.function(inputs=[X,Y], outputs=loss), parameters)
+    parameters = [('Minibatches', {'batch_size':2, 'contiguous_sampling':False}),
+                  ('IterationCounter', {'max_iterations':10}),
+                  ('GradientDescent', {'learning_rate':0.5})]
     
-    print(opt.loss([1,1,1,1,1], [5,1,4,5,1]))
-    opt.fit([1,1,1,1,1], [5,1,4,5,1])
-    print(opt.loss([1,1,1,1,1], [5,1,4,5,1]))
+    opt = build(loss,[W1,W2],[X,Y], parameters)
+
+    xor_toy_problem = [[1,0],[1,1],[1,1],[0,0],[0,1],[0,1],[1,0],
+                       [1,0],[0,0],[0,1],[1,1],[1,0],[1,1],[0,1]]
+
+    xor_toy_labels = [1,0,0,0,1,1,1,
+                      1,0,1,0,1,0,1]
+    
+    print(opt.loss(xor_toy_problem, xor_toy_labels))
+    opt.fit(xor_toy_problem, xor_toy_labels)
+    print(opt.loss(xor_toy_problem, xor_toy_labels))
     
