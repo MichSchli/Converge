@@ -1,0 +1,22 @@
+from abstract import IOptimizer
+import numpy as np
+import tensorflow as tf
+
+class GradientDescent(IOptimizer):
+
+    learning_rate = None
+
+    def valid(self):
+        return self.learning_rate is not None
+
+    def process_update_function(self, parameters, loss_function):
+        gradient = self.compute_gradient_function(parameters, loss_function)
+
+        update_list = self.next_component.process_update_function(parameters, loss_function)
+        lower_count = len(update_list)
+        
+        update_list += [None]*len(gradient)
+        for i in range(len(gradient)):
+            update_list[lower_count + i] = (parameters[i], parameters[i] - self.learning_rate * gradient[i])
+
+        return update_list

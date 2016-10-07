@@ -3,6 +3,7 @@ import random
 from theano import tensor as T
 import theano
 import numpy as np
+import tensorflow as tf
 
 class GradientDescent(IOptimizer):
 
@@ -11,10 +12,10 @@ class GradientDescent(IOptimizer):
     def valid(self):
         return self.learning_rate is not None
 
-    def process_update_function(self, parameters, loss_function):
+    def theano_process_update_function(self, parameters, loss_function):
         gradient = self.compute_gradient_function(parameters, loss_function)
 
-        update_list = self.next_component.process_update_function(parameters, loss_function)
+        update_list = self.next_component.theano_process_update_function(parameters, loss_function)
         lower_count = len(update_list)
         
         update_list += [None]*len(gradient)
@@ -34,14 +35,14 @@ class AdaGrad(IOptimizer):
         self.historical_gradient = [None]*len(parameters)
         
         for i,parameter in enumerate(parameters):
-            self.historical_gradient[i] = theano.shared(np.zeros_like(parameter.get_value()).astype(np.float32))
+            self.historical_gradient[i] = theano.shared((np.ones_like(parameter.get_value())*0.1).astype(np.float32))
 
     def valid(self):
         return self.learning_rate is not None
 
-    def process_update_function(self, parameters, loss_function):
+    def theano_process_update_function(self, parameters, loss_function):
         gradient = self.compute_gradient_function(parameters, loss_function)
-        update_list = self.next_component.process_update_function(parameters, loss_function)
+        update_list = self.next_component.theano_process_update_function(parameters, loss_function)
         lower_count = len(update_list)
 
         self.initialize_running_average(parameters)
@@ -49,7 +50,7 @@ class AdaGrad(IOptimizer):
         update_list += [None]*(len(gradient)*2)
         for i in range(len(gradient)):
             new_historical_gradient = self.historical_gradient[i] + gradient[i] * gradient[i]
-            scaling = T.sqrt(new_historical_gradient + self.epsillon)
+            scaling = T.sqrt(new_historical_gradient) + self.epsillon
             delta = (self.learning_rate / scaling) * gradient[i]
             
             update_list[lower_count + i] = (parameters[i], parameters[i] - delta)            
@@ -74,9 +75,9 @@ class RmsProp(IOptimizer):
     def valid(self):
         return self.learning_rate is not None and self.historical_weight is not None
 
-    def process_update_function(self, parameters, loss_function):
+    def theano_process_update_function(self, parameters, loss_function):
         gradient = self.compute_gradient_function(parameters, loss_function)
-        update_list = self.next_component.process_update_function(parameters, loss_function)
+        update_list = self.next_component.theano_process_update_function(parameters, loss_function)
         lower_count = len(update_list)
 
         self.initialize_running_average(parameters)
@@ -116,9 +117,9 @@ class Adam(IOptimizer):
     def valid(self):
         return self.learning_rate is not None and self.historical_gradient_weight is not None and self.historical_moment_weight is not None
 
-    def process_update_function(self, parameters, loss_function):
+    def theano_process_update_function(self, parameters, loss_function):
         gradient = self.compute_gradient_function(parameters, loss_function)
-        update_list = self.next_component.process_update_function(parameters, loss_function)
+        update_list = self.next_component.theano_process_update_function(parameters, loss_function)
         lower_count = len(update_list)
 
         self.initialize_running_average(parameters)
@@ -128,11 +129,12 @@ class Adam(IOptimizer):
             new_historical_moment = self.historical_moment_weight*self.historical_moment[i] + (1-self.historical_moment_weight) * gradient[i]
             new_historical_gradient = self.historical_gradient_weight*self.historical_gradient[i] + (1-self.historical_gradient_weight)*gradient[i] * gradient[i]
 
-            corrected_moment = new_historical_moment / (1 - self.historical_moment_weight**self.iteration)
-            corrected_gradient = new_historical_gradient / (1 - self.historical_gradient_weight**self.iteration)
+            corrected_learning_rate = self.learning_rate * T.sqrt(1 - self.historical_gradient_weight**self.iteration) / (1 - self.historical_moment_weight**self.iteration)
+            corrected_moment = new_historical_moment #/ (1 - self.historical_moment_weight**self.iteration)
+            corrected_gradient = new_historical_gradient #/ (1 - self.historical_gradient_weight**self.iteration)
             
-            scaling = T.sqrt(corrected_gradient + self.epsillon)
-            delta = (self.learning_rate / scaling) * corrected_moment
+            scaling = T.sqrt(corrected_gradient) + self.epsillon
+            delta = (corrected_learning_rate / scaling) * corrected_moment
             
             update_list[lower_count + i] = (parameters[i], parameters[i] - delta)            
             update_list[lower_count + i + len(gradient)] = (self.historical_gradient[i], new_historical_gradient)
@@ -180,12 +182,12 @@ class Minibatches(IOptimizer):
         pass
 
     def __random_sample(self):
-        data, labels = self.next_component.next_batch()
-        n_total = len(data)        
+        data = self.next_component.next_batch()
+        n_total = len(data)
 
         sample = random.sample(range(n_total), self.batch_size)
 
-        return [data[i] for i in sample], [labels[i] for i in sample]
+        return [data[i] for i in sample]
 
 
 class SampleTransformer(IOptimizer):
@@ -195,9 +197,9 @@ class SampleTransformer(IOptimizer):
     def valid(self):
         return self.transform_function is not None
 
-    def process_data(self, training_data, training_labels):
-        data = self.next_component.process_data(training_data, training_labels)
-        return self.transform_function(*data)
+    def process_data(self, training_data):
+        data = self.next_component.process_data(training_data)
+        return self.transform_function(data)
     
     
 class GradientClipping(IOptimizer):
@@ -220,3 +222,14 @@ class GradientClipping(IOptimizer):
 
         return gradient
 
+class ModelSaver(IOptimizer):
+
+    model_path = None
+    save_function = None
+
+    def valid(self):
+        return self.model_path is not None and self.save_function is not None
+
+    def postprocess(self):
+        self.next_component.postprocess()
+        self.save_function(self.model_path)
