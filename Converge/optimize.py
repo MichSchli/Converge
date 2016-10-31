@@ -13,6 +13,9 @@ class TensorflowOptimizer():
 
     def set_placeholders(self, placeholders):
         self.placeholders = placeholders
+
+    def set_session(self, session):
+        self.session = session
         
     def compute_functions(self, loss_function, parameters_to_optimize):
         self.loss_function = self.stack.process_loss_function(loss_function)
@@ -21,7 +24,7 @@ class TensorflowOptimizer():
         self.variables = parameters_to_optimize
         
     def loss(self, placeholder_input):
-        self.session = tf.Session()
+        #self.session = tf.Session()
         placeholder_input = self.stack.process_data(placeholder_input)
         init_op = tf.initialize_all_variables()
         self.session.run(init_op)
@@ -31,7 +34,7 @@ class TensorflowOptimizer():
 
     
     def gradients(self, placeholder_input):
-        self.session = tf.Session()
+        #self.session = tf.Session()
 
         placeholder_input = self.stack.process_data(placeholder_input)
         init_op = tf.initialize_all_variables()
@@ -43,8 +46,10 @@ class TensorflowOptimizer():
     
     def fit(self, training_data, validation_data=None):
         self.stack.set_training_data(training_data)
+        if validation_data is not None:
+            self.stack.set_validation_data(validation_data)
 
-        self.session = tf.Session()
+        #self.session = tf.Session()
         self.stack.set_session(self.session)
         
         #optimizer = tf.train.GradientDescentOptimizer(100.0).minimize(self.loss_function)
@@ -52,11 +57,10 @@ class TensorflowOptimizer():
         self.session.run(init_op)
 
         i = 0
-        train_loss = 0
         next_batch = self.stack.next_batch()
         while(next_batch is not None):
-            
             i+=1
+            self.stack.set_iteration(i)
 
             processed_batch = self.stack.process_data(next_batch)
             feed_dict = dict(zip(self.placeholders, processed_batch))
@@ -64,23 +68,10 @@ class TensorflowOptimizer():
             _,loss = self.session.run([self.update_function, self.loss_function],
                                        feed_dict=feed_dict)
 
-            train_loss += loss
-            self.stack.postprocess(self.variables)
-            if i % 1 == 0:
-                print(i)
-                print(train_loss/1)
-                
-                train_loss = 0
+            if self.stack.postprocess(loss) == 'stop':
+                print("Stopping training.")
+                break
 
-            if i == 1:
-                print(train_loss)
-
-            if i % 100 == 0:
-                processed_validation_data = self.stack.process_data(validation_data)
-                dev_feed_dict = dict(zip(self.placeholders, processed_validation_data))
-                dev_loss = self.session.run(self.loss_function, feed_dict=dev_feed_dict)
-                print("Development loss: "+str(dev_loss))
-                      
             next_batch = self.stack.next_batch()
         
 
@@ -195,6 +186,9 @@ def __from_component(component_name, backend='theano'):
             return algorithms.ModelSaver
         elif backend == 'tensorflow':
             return tensorflow_algorithms.ModelSaver
+
+    if component_name == "TrainLossReporter":
+        return tensorflow_algorithms.TrainLossReporter
         
     
 def __construct_optimizer(settings, backend='theano'):

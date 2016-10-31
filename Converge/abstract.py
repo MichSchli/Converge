@@ -30,15 +30,30 @@ class IOptimizer():
     def compute_gradient_function(self, parameters, loss_function):
         return self.next_component.compute_gradient_function(parameters, loss_function)
     
-    def postprocess(self, variables):
-        self.next_component.postprocess(variables)
-        
+    def postprocess(self, loss):
+        if self.next_component is not None:
+            return self.next_component.postprocess(loss)
+        else:
+            return 'continue'
+
+    def set_iteration(self, iteration):
+        self.iteration = iteration
+
+        if self.next_component is not None:
+            self.next_component.set_iteration(iteration)
+
     def next_batch(self):
         return self.next_component.next_batch()
 
     def get_message(self):
         return self.next_component.get_message()
-    
+
+    def set_validation_data(self, validation_data):
+        self.validation_data = validation_data
+
+        if self.next_component is not None:
+            self.next_component.set_validation_data(validation_data)
+            
     def set_training_data(self, training_data):
         self.training_data = training_data
 
@@ -92,9 +107,6 @@ class BaseOptimizer(IOptimizer):
 
     def process_data(self, data):
         return data
-    
-    def postprocess(self, variables):
-        pass
 
     def process_gradient_function(self, loss_function, parameters_to_optimize):
         return tf.gradients(loss_function, parameters_to_optimize)
