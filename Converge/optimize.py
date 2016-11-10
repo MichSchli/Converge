@@ -65,9 +65,11 @@ class TensorflowOptimizer():
             processed_batch = self.stack.process_data(next_batch)
             feed_dict = dict(zip(self.placeholders, processed_batch))
 
-            _,loss = self.session.run([self.update_function, self.loss_function],
+            adds = self.stack.get_additional_ops()
+            upd = self.session.run([self.update_function, self.loss_function, adds],
                                        feed_dict=feed_dict)
 
+            loss = upd[1]
             if self.stack.postprocess(loss) == 'stop':
                 print("Stopping training.")
                 break
@@ -189,6 +191,9 @@ def __from_component(component_name, backend='theano'):
 
     if component_name == "TrainLossReporter":
         return tensorflow_algorithms.TrainLossReporter
+
+    if component_name == "AdditionalOp":
+        return tensorflow_algorithms.AdditionalOp
         
     
 def __construct_optimizer(settings, backend='theano'):

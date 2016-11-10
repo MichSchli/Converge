@@ -115,6 +115,14 @@ class TrainLossReporter(IOptimizer):
 
         return value_of_next
 
+class AdditionalOp(IOptimizer):
+    op = None
+
+    def valid(self):
+        return self.op is not None
+
+    def get_additional_ops(self):
+        return self.next_component.get_additional_ops() + [self.op]
             
 class EarlyStopper(IOptimizer):
 

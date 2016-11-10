@@ -63,6 +63,9 @@ class IOptimizer():
     '''
     TF:
     '''
+
+    def get_additional_ops(self):
+        return self.next_component.get_additional_ops()
     
     def set_session(self, session):
         self.session = session
@@ -87,6 +90,9 @@ class BaseOptimizer(IOptimizer):
     def verify(self):
         return True
 
+    def get_additional_ops(self):
+        return []
+    
     def process_loss_function(self, loss_function):
         return loss_function
 
