@@ -59,6 +59,7 @@ class GradientClipping(IOptimizer):
         return clipped
 
 
+'''
 class ModelSaver(IOptimizer):
 
     model_path = None
@@ -78,93 +79,5 @@ class ModelSaver(IOptimizer):
             self.save_function(self.model_path)
 
         return value_of_next
-
-class TrainLossReporter(IOptimizer):
-    evaluate_every_n = 1
-
-    cummulative_loss = 0
-
-    def valid(self):
-        return True
-
-    def postprocess(self, loss):
-        value_of_next = self.next_component.postprocess(loss)
-
-        if value_of_next == 'stop':
-            return 'stop'
-        
-        self.cummulative_loss += loss
-
-        if self.iteration == 1:
-            self.cummulative_loss = 0
-            print("Initial loss: "+str(loss))
-            return value_of_next
-                  
-        if self.iteration % self.evaluate_every_n == 1:
-            average_loss = self.cummulative_loss / float(self.evaluate_every_n)
-            self.cummulative_loss = 0
-
-            begin_iteration = self.iteration - self.evaluate_every_n
-            end_iteration = self.iteration - 1
-            print("Average train loss for iteration "
-                  + str(begin_iteration)
-                  + "-"
-                  + str(end_iteration)
-                  + ": "
-                  + str(average_loss))
-
-        return value_of_next
-
-class AdditionalOp(IOptimizer):
-    op = None
-
-    def valid(self):
-        return self.op is not None
-
-    def get_additional_ops(self):
-        return self.next_component.get_additional_ops() + [self.op]
-            
-class EarlyStopper(IOptimizer):
-
-    criteria = None
-    evaluate_every_n = 1
-    
-    previous_validation_score = None
-    burnin = 0
-    
-    def valid(self):
-        if self.criteria is None:
-            return False
-
-        if self.criteria == 'score_validation_data' and self.scoring_function is None:
-            return False
-
-        if self.criteria == 'score_validation_data' and self.comparator is None:
-            return False
-        
-        return self.evaluate_every_n is not None
-
-    def postprocess(self, loss):
-        value_of_next = self.next_component.postprocess(loss)
-
-        if value_of_next == 'stop':
-            return 'stop'
-        
-        if self.iteration % self.evaluate_every_n == 0:
-            if self.criteria == 'score_validation_data':
-                validation_score = self.scoring_function(self.validation_data)
-
-                print("Tested validation score at iteration "+str(self.iteration)+". Result: "+str(validation_score))
-                if self.previous_validation_score is not None:
-                    if not self.comparator(validation_score, self.previous_validation_score):
-                        if self.iteration > self.burnin:
-                            print("Stopping criterion reached.")
-                        
-                            return 'stop'
-                        else:
-                            print("Ignoring criterion while in burn-in phase.")
-
-                self.previous_validation_score = validation_score
-
-        return value_of_next
                 
+'''

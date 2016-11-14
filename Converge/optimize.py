@@ -1,15 +1,44 @@
-import algorithms
 import tensorflow_backend.algorithms as tensorflow_algorithms
+import theano_backend.algorithms as theano_algorithms
+import shared.algorithms as shared_algorithms
 import theano
 from theano import tensor as T
 from abstract import BaseOptimizer
 import numpy as np
 import tensorflow as tf
 
-class TensorflowOptimizer():
+'''
+Partial class for shared architecture between theano/tensorflow optimizers.
+'''
+
+class Optimizer():
 
     def __init__(self, stack):
         self.stack = stack
+
+    def fit(self, training_data, validation_data=None):
+        self.stack.set_training_data(training_data)
+        if validation_data is not None:
+            self.stack.set_validation_data(validation_data)
+
+        self.initialize_for_fitting()
+
+        i = 0
+        next_batch = self.stack.next_batch()
+        while(next_batch is not None):
+            i+=1
+            self.stack.set_iteration(i)
+
+            processed_batch = self.stack.process_data(next_batch)
+            train_loss = self.update_from_batch(processed_batch)
+            
+            if self.stack.postprocess(train_loss) == 'stop':
+                print("Stopping training.")
+                break
+
+            next_batch = self.stack.next_batch()
+        
+class TensorflowOptimizer(Optimizer):
 
     def set_placeholders(self, placeholders):
         self.placeholders = placeholders
@@ -31,7 +60,6 @@ class TensorflowOptimizer():
         
         feed_dict = dict(zip(self.placeholders, placeholder_input))
         return self.session.run(self.loss_function, feed_dict=feed_dict) 
-
     
     def gradients(self, placeholder_input):
         #self.session = tf.Session()
@@ -43,41 +71,23 @@ class TensorflowOptimizer():
         feed_dict = dict(zip(self.placeholders, placeholder_input))
         return self.session.run(self.gradient_function, feed_dict=feed_dict)
 
-    
-    def fit(self, training_data, validation_data=None):
-        self.stack.set_training_data(training_data)
-        if validation_data is not None:
-            self.stack.set_validation_data(validation_data)
-
+    def initialize_for_fitting(self):
         #self.session = tf.Session()
         self.stack.set_session(self.session)
         
-        #optimizer = tf.train.GradientDescentOptimizer(100.0).minimize(self.loss_function)
         init_op = tf.initialize_all_variables()
         self.session.run(init_op)
 
-        i = 0
-        next_batch = self.stack.next_batch()
-        while(next_batch is not None):
-            i+=1
-            self.stack.set_iteration(i)
+    def update_from_batch(self, processed_batch):        
+        feed_dict = dict(zip(self.placeholders, processed_batch))
 
-            processed_batch = self.stack.process_data(next_batch)
-            feed_dict = dict(zip(self.placeholders, processed_batch))
-
-            adds = self.stack.get_additional_ops()
-            upd = self.session.run([self.update_function, self.loss_function, adds],
+        adds = self.stack.get_additional_ops()
+        upd = self.session.run([self.update_function, self.loss_function, adds],
                                        feed_dict=feed_dict)
 
-            loss = upd[1]
-            if self.stack.postprocess(loss) == 'stop':
-                print("Stopping training.")
-                break
+        return upd[1]
 
-            next_batch = self.stack.next_batch()
-        
-
-class Optimizer():
+class TheanoOptimizer(Optimizer):
 
     __loss__ = None
     __update__ = None
@@ -95,19 +105,16 @@ class Optimizer():
     def compute_update_function(self, input_params):
         raw_update = self.stack.theano_process_update_function(self.__parameters__, self.__loss__)
         self.__update__ = theano.function(inputs=input_params, outputs=self.__loss__, updates=raw_update)
-
-        
-        g = self.stack.compute_gradient_function(self.__parameters__, self.__loss__)
-        self.gradient_f = theano.function(inputs=input_params, outputs=g)
         
         self.__loss__ = theano.function(inputs=input_params, outputs=self.__loss__)
 
+    def initialize_for_fitting(self):
+        pass
+    
+    def update_from_batch(self, processed_batch):
+        return self.__update__(*tuple(processed_batch))
 
-    
-    def loss(self, validation_data, validation_labels):
-        processed_data, processed_labels = self.stack.process_data(validation_data, validation_labels)
-        return self.__loss__(processed_data, processed_labels) 
-    
+    '''
     def fit(self, training_data, validation_data=None):
         self.stack.set_training_data(training_data)
                   
@@ -140,57 +147,56 @@ class Optimizer():
             
             next_batch = self.stack.next_batch()
 
+    '''
+    
 def __from_component(component_name, backend='theano'):
     if component_name == "GradientDescent":
         if backend == 'theano':
-            return algorithms.GradientDescent
+            return theano_algorithms.GradientDescent
         elif backend == 'tensorflow':
             return tensorflow_algorithms.GradientDescent
     
     if component_name == "Minibatches":
-        return algorithms.Minibatches
+        return shared_algorithms.Minibatches
 
     if component_name == "IterationCounter":
-        return algorithms.IterationCounter
+        return shared_algorithms.IterationCounter
 
     if component_name == "SampleTransformer":
-        return algorithms.SampleTransformer
+        return shared_algorithms.SampleTransformer
 
     if component_name == "GradientClipping":
         if backend == 'theano':
-            return algorithms.GradientClipping
+            return theano_algorithms.GradientClipping
         elif backend == 'tensorflow':
             return tensorflow_algorithms.GradientClipping
 
     if component_name == "EarlyStopper":
-        if backend == 'theano':
-            return algorithms.EarlyStopper
-        elif backend == 'tensorflow':
-            return tensorflow_algorithms.EarlyStopper
+        return shared_algorithms.EarlyStopper
         
     if component_name == "AdaGrad":
         if backend == 'theano':
-            return algorithms.AdaGrad
+            return theano_algorithms.AdaGrad
         elif backend == 'tensorflow':
             return tensorflow_algorithms.AdaGrad
-    
+
     if component_name == "RmsProp":
-        return algorithms.RmsProp
+        if backend == 'theano':
+            return theano_algorithms.RmsProp
+        elif backend == 'tensorflow':
+            return tensorflow_algorithms.RmsProp
 
     if component_name == "Adam":
         if backend == 'theano':
-            return algorithms.Adam
+            return theano_algorithms.Adam
         elif backend == 'tensorflow':
             return tensorflow_algorithms.Adam
 
     if component_name == "ModelSaver":
-        if backend == 'theano':
-            return algorithms.ModelSaver
-        elif backend == 'tensorflow':
-            return tensorflow_algorithms.ModelSaver
+        return shared_algorithms.ModelSaver
 
     if component_name == "TrainLossReporter":
-        return tensorflow_algorithms.TrainLossReporter
+        return shared_algorithms.TrainLossReporter
 
     if component_name == "AdditionalOp":
         return tensorflow_algorithms.AdditionalOp
@@ -206,12 +212,12 @@ def __construct_optimizer(settings, backend='theano'):
         print("Construction failed.")
 
     if backend == 'theano':
-        return Optimizer(optimizer)
+        return TheanoOptimizer(optimizer)
     elif backend == 'tensorflow':
         return TensorflowOptimizer(optimizer)
 
-def build(loss_function, parameters_to_optimize, settings, input_params):
-    optimizer = __construct_optimizer(settings)
+def build_theano(loss_function, parameters_to_optimize, settings, input_params):
+    optimizer = __construct_optimizer(settings, backend='theano')
     
     optimizer.set_loss_function(loss_function)
     optimizer.set_parameters_to_optimize(parameters_to_optimize)
@@ -219,7 +225,7 @@ def build(loss_function, parameters_to_optimize, settings, input_params):
     
     return optimizer
 
-def tfbuild(loss_function, parameters_to_optimize, settings, placeholders):
+def build_tensorflow(loss_function, parameters_to_optimize, settings, placeholders):
     optimizer = __construct_optimizer(settings, backend='tensorflow')
     
     optimizer.compute_functions(loss_function, parameters_to_optimize)

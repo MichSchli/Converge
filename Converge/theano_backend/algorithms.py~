@@ -144,63 +144,7 @@ class Adam(IOptimizer):
 
         return update_list
 
-    
-class IterationCounter(IOptimizer):
 
-    max_iterations = None
-    iterations = 0
-
-    def valid(self):
-        return self.max_iterations is not None
-
-    def next_batch(self):
-        if self.iterations < self.max_iterations:
-            self.iterations += 1
-            return self.next_component.next_batch()
-        else:
-            return None
-
-class Minibatches(IOptimizer):
-
-    batch_size = None
-    contiguous_sampling = None
-
-    current_batch = None
-
-    def valid(self):
-        return self.batch_size is not None and self.contiguous_sampling is not None
-
-    def next_batch(self):
-        if self.contiguous_sampling:
-            return self.__contiguous_sample()
-        else:
-            return self.__random_sample()
-    
-    def __contiguous_sample(self):
-        if current_batch is None:
-            current_batch = self.next_component.next_batch()
-        pass
-
-    def __random_sample(self):
-        data = self.next_component.next_batch()
-        n_total = len(data)
-
-        sample = random.sample(range(n_total), self.batch_size)
-
-        return [data[i] for i in sample]
-
-
-class SampleTransformer(IOptimizer):
-
-    transform_function = None
-
-    def valid(self):
-        return self.transform_function is not None
-
-    def process_data(self, training_data):
-        data = self.next_component.process_data(training_data)
-        return self.transform_function(data)
-    
     
 class GradientClipping(IOptimizer):
 
@@ -222,14 +166,3 @@ class GradientClipping(IOptimizer):
 
         return gradient
 
-class ModelSaver(IOptimizer):
-
-    model_path = None
-    save_function = None
-
-    def valid(self):
-        return self.model_path is not None and self.save_function is not None
-
-    def postprocess(self):
-        self.next_component.postprocess()
-        self.save_function(self.model_path)
