@@ -35,8 +35,9 @@ class AdaGrad(IOptimizer):
         self.historical_gradient = [None]*len(parameters)
         
         for i,parameter in enumerate(parameters):
-            self.historical_gradient[i] = theano.shared((np.ones_like(parameter.get_value())*0.1).astype(np.float32))
+            self.historical_gradient[i] = theano.shared((np.zeros_like(parameter.get_value())).astype(np.float32))
 
+            
     def valid(self):
         return self.learning_rate is not None
 
@@ -50,7 +51,7 @@ class AdaGrad(IOptimizer):
         update_list += [None]*(len(gradient)*2)
         for i in range(len(gradient)):
             new_historical_gradient = self.historical_gradient[i] + gradient[i] * gradient[i]
-            scaling = T.sqrt(new_historical_gradient) + self.epsillon
+            scaling = T.sqrt(new_historical_gradient + self.epsillon)
             delta = (self.learning_rate / scaling) * gradient[i]
             
             update_list[lower_count + i] = (parameters[i], parameters[i] - delta)            
@@ -98,12 +99,12 @@ class RmsProp(IOptimizer):
 class Adam(IOptimizer):
 
     learning_rate = None
-    historical_gradient_weight = 0.9
-    historical_moment_weight = 0.999
+    historical_moment_weight = 0.9
+    historical_gradient_weight = 0.999
 
     epsillon = 1e-8
     historical_gradient = None
-
+    
     def initialize_running_average(self, parameters):
         self.historical_gradient = [None]*len(parameters)
         self.historical_moment = [None]*len(parameters)
@@ -112,7 +113,7 @@ class Adam(IOptimizer):
             self.historical_gradient[i] = theano.shared(np.zeros_like(parameter.get_value()).astype(np.float32))
             self.historical_moment[i] = theano.shared(np.zeros_like(parameter.get_value()).astype(np.float32))
 
-        self.iteration = theano.shared(np.cast['float32'](1))
+        self.theano_iteration = theano.shared(np.cast['float32'](1))
         
     def valid(self):
         return self.learning_rate is not None and self.historical_gradient_weight is not None and self.historical_moment_weight is not None
@@ -127,11 +128,11 @@ class Adam(IOptimizer):
         update_list += [None]*(len(gradient)*3+1)
         for i in range(len(gradient)):
             new_historical_moment = self.historical_moment_weight*self.historical_moment[i] + (1-self.historical_moment_weight) * gradient[i]
-            new_historical_gradient = self.historical_gradient_weight*self.historical_gradient[i] + (1-self.historical_gradient_weight)*gradient[i] * gradient[i]
+            new_historical_gradient = self.historical_gradient_weight*self.historical_gradient[i] + (1-self.historical_gradient_weight)*T.sqr(gradient[i])
 
-            corrected_learning_rate = self.learning_rate * T.sqrt(1 - self.historical_gradient_weight**self.iteration) / (1 - self.historical_moment_weight**self.iteration)
-            corrected_moment = new_historical_moment #/ (1 - self.historical_moment_weight**self.iteration)
-            corrected_gradient = new_historical_gradient #/ (1 - self.historical_gradient_weight**self.iteration)
+            corrected_learning_rate = self.learning_rate #* T.sqrt(1 - self.historical_gradient_weight**self.iteration) / (1 - self.historical_moment_weight**self.iteration)
+            corrected_moment = new_historical_moment / (1 - self.historical_moment_weight**self.theano_iteration)
+            corrected_gradient = new_historical_gradient / (1 - self.historical_gradient_weight**self.theano_iteration)
             
             scaling = T.sqrt(corrected_gradient) + self.epsillon
             delta = (corrected_learning_rate / scaling) * corrected_moment
@@ -140,7 +141,7 @@ class Adam(IOptimizer):
             update_list[lower_count + i + len(gradient)] = (self.historical_gradient[i], new_historical_gradient)
             update_list[lower_count + i + len(gradient)*2] = (self.historical_moment[i], new_historical_moment)
 
-        update_list[-1] = (self.iteration, self.iteration + 1)
+        update_list[-1] = (self.theano_iteration, self.theano_iteration + 1)
 
         return update_list
 

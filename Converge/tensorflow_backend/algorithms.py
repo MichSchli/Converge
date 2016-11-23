@@ -18,8 +18,8 @@ class GradientDescent(IOptimizer):
 class Adam(IOptimizer):
 
     learning_rate = None
-    historical_gradient_weight = 0.9
-    historical_moment_weight = 0.999
+    historical_moment_weight = 0.9
+    historical_second_moment_weight = 0.999
 
     def valid(self):
         return self.learning_rate is not None
@@ -27,7 +27,7 @@ class Adam(IOptimizer):
     def process_update_function(self, gradient_function, parameters_to_optimize):
         opt_func = tf.train.AdamOptimizer(learning_rate=self.learning_rate,
                                           beta1=self.historical_moment_weight,
-                                          beta2=self.historical_gradient_weight)
+                                          beta2=self.historical_second_moment_weight)
         optimizer = opt_func.apply_gradients(zip(gradient_function, parameters_to_optimize))
 
         return optimizer
